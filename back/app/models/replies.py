@@ -9,10 +9,7 @@ from app.config.db import Base
 class Replies(Base):
     __tablename__ = "replies"
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    time_created: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=lambda: datetime.now(),
-    )
+    time_created: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now())
     model: Mapped[str] = mapped_column(String(50), nullable=False)
     reply: Mapped[str] = mapped_column(String(512), nullable=False)
     version: Mapped[str] = mapped_column(String(50), nullable=False)
