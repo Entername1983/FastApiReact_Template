@@ -1,0 +1,120 @@
+services:
+  nginx:
+    image: nginx:latest
+    container_name: nginx_proxy
+    ports:
+      - "80:80" # Expose HTTP traffic
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro # Custom Nginx config file
+    networks:
+      - internal-network
+    depends_on:
+      - frontend
+      - backend
+      - minio
+      - postgres_ai_echoes
+
+  backend:
+    build:
+      context: ./back
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5000:8000"
+    volumes:
+      - ./back:/code
+    environment:
+      - UVICORN_HOST=0.0.0.0
+      - UVICORN_PORT=8000
+      - UVICORN_LOG_LEVEL=debug
+      - DEBUG=1
+    command: uvicorn app.main:app --host 0.0.0.0 --reload
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    networks:
+      - internal-network
+    depends_on:
+      - redis
+      - postgres_ai_echoes
+
+  storyteller:
+    volumes:
+      - ./back:/code
+    build:
+      context: ./back
+      dockerfile: docker/Dockerfile.storyteller
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    networks:
+      - internal-network
+    depends_on:
+      - redis
+      - postgres_ai_echoes
+
+  frontend:
+    build:
+      context: ./front
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./front:/code
+      - /code/node_modules
+    image: aiechoes_frontend:1.0
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_BACKEND_URL=/api
+      - CHOKIDAR_USEPOLLING=true
+    networks:
+      - internal-network
+
+  postgres_ai_echoes:
+    image: postgres
+    environment:
+      POSTGRES_DB: aiechoes_dev
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: 1234
+    restart: always
+    volumes:
+      - ./postgres:/docker-entrypoint-initdb.d
+      - ./postgres-data:/var/lib/postgresql/data
+    networks:
+      - internal-network
+    ports:
+      - "5431:5432"
+
+  redis:
+    image: redis/redis-stack-server:latest
+    # ports:
+    #   - "6379:6379"
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD}",
+        "--loadmodule /opt/redis-stack/lib/redisearch.so",
+        "--loadmodule /opt/redis-stack/lib/rejson.so",
+      ]
+    networks:
+      - internal-network
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000" # MinIO API Port
+      - "9001:9001" # MinIO Console Port
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    networks:
+      - internal-network
+volumes:
+  minio_data:
+
+networks:
+  internal-network:
+## Commands
+# docker-compose -f compose.dev.yml up -d
